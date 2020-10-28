@@ -25,7 +25,7 @@ parser.add_argument('data', metavar='DIR',
 parser.add_argument('--arch', '-a', metavar='ARCH', default='resnet34')
 parser.add_argument('-j', '--workers', default=32, type=int, metavar='N',
                     help='number of data loading workers (default: 4)')
-parser.add_argument('--epochs', default=30, type=int, metavar='N',
+parser.add_argument('--epochs', default=10, type=int, metavar='N',
                     help='number of total epochs to run')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
@@ -45,9 +45,10 @@ parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true',
                     help='evaluate model on validation set')
 parser.add_argument('--pretrained', dest='pretrained', action='store_true',
                     help='use pre-trained model')
-args = parser.parse_args()
-best_prec1 = 0
 
+#os.environ["CUDA_VISIBLE_DEVICES"] = str(0)
+best_prec1 = 0
+args = parser.parse_args()
 import numpy as np
 def rand_bbox(size, lam):
     W = size[2]
@@ -65,6 +66,7 @@ def rand_bbox(size, lam):
     bby2 = np.clip(cy + cut_h // 2, 0, H)
     return bbx1, bby1, bbx2, bby2
 
+from folder2lmdb import ImageFolderLMDB
 
 def getdataset():
     
@@ -92,11 +94,14 @@ def getdataset():
     
     traindir = os.path.join(args.data, 'train')
     valdir = os.path.join(args.data, 'val')
+    #traindir = os.path.join('/lustre/home/acct-seedwr/seedwr/imagenetdata','%s.lmdb'%'train')
+    #valdir = os.path.join('/lustre/home/acct-seedwr/seedwr/imagenetdata','%s.lmdb'%'val')
     #valdir = '/home/data/val'
-
+    imf=datasets.ImageFolder
+    #imf=ImageFolderLMDB
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                  std=[0.229, 0.224, 0.225])
-    train_dataset = datasets.ImageFolder(traindir,
+    train_dataset = imf(traindir,
                 transforms.Compose([
                 transforms.RandomResizedCrop(224),
                 transforms.RandomHorizontalFlip(),
@@ -108,8 +113,7 @@ def getdataset():
         batch_size=args.batch_size, shuffle=True,
         num_workers=args.workers, pin_memory=True) 
 
-    imf=datasets.ImageFolder
-    # imf=ImageFolderLMDB
+
     val_loader = torch.utils.data.DataLoader(
        imf(valdir, transforms.Compose([
             transforms.Resize(256),
@@ -121,6 +125,7 @@ def getdataset():
 
 
 from resnet import resnet18,resnet34
+import quant_utils
 if '18' in args.arch:
     net = resnet18
 else:
@@ -128,6 +133,9 @@ else:
 
 def main():
     global args, best_prec1
+    #Bits=[10, 8, 7, 8, 6, 7, 5, 10, 6, 4, 5, 4, 5, 4, 3, 3, 3, 5, 3, 3]# 37527424.0/11166912
+    #Bits=[10, 9, 8, 9, 8, 8, 7,  9, 7, 6, 6, 5, 7, 4, 4, 4, 3, 8, 3, 3]# 41627520.0
+    Bits=4
 
     # create model
     if args.pretrained:
@@ -136,6 +144,8 @@ def main():
     else:
         print("=> creating model '{}'".format(args.arch))
         model = net()
+
+    model,sf_list=quant_utils.quant_model_bit(model,Bits)
 
     model = torch.nn.DataParallel(model).cuda()
 
@@ -152,6 +162,7 @@ def main():
             checkpoint = torch.load(args.resume)
             args.start_epoch = checkpoint['epoch']
             best_prec1 = checkpoint['best_prec1']
+            sf_list = checkpoint['sf']
             model.load_state_dict(checkpoint['state_dict'])
             optimizer.load_state_dict(checkpoint['optimizer'])
             print("=> loaded checkpoint '{}' (epoch {})"
@@ -159,28 +170,7 @@ def main():
         else:
             print("=> no checkpoint found at '{}'".format(args.resume))
 
-    if args.resume:
-        if os.path.isfile(args.resume):
-            print("=> loading checkpoint '{}'".format(args.resume))
-            checkpoint = torch.load(args.resume)
-            if 'optimizer' in checkpoint.keys():
-                args.start_epoch = checkpoint['epoch']
-                best_prec1 = checkpoint['best_prec1']
-                optimizer.load_state_dict(checkpoint['optimizer'])
-                checkpoint = checkpoint['state_dict']
-            try:
-                model.load_state_dict(checkpoint)
-                print("=> loaded checkpoint '{}' (epoch {})"
-                      .format(args.resume, checkpoint['epoch']))             
-            except:
-                state_dict=model.state_dict()
-                name_par=list(checkpoint.keys())
-                k0=0
-                for key,para in state_dict.items():
-                    if k0<len(name_par) and para.numel()==checkpoint[name_par[k0]].numel():
-                        state_dict[key]=checkpoint[name_par[k0]]
-                        k0+=1  
-                model.load_state_dict(state_dict)
+    quant_utils.quant_relu_module_bit(model, 4)
 
     cudnn.benchmark = True
 
@@ -196,10 +186,10 @@ def main():
         return
 
     for epoch in range(args.start_epoch, args.epochs):
-        consine_learning_rate(optimizer, epoch, args.lr, args.epochs)
+        consine_learning_rate(optimizer, epoch,args.lr,args.epochs)
 
         # train for one epoch
-        train(train_loader, model, criterion, optimizer, epoch,val_loader)
+        train(train_loader, model, criterion, optimizer, epoch,sf_list,Bits)
 
         # evaluate on validation set
         prec1 = validate(val_loader, model, criterion)
@@ -210,13 +200,14 @@ def main():
         save_checkpoint({
             'epoch': epoch + 1,
             'arch': args.arch,
+            'sf': sf_list,
             'state_dict': model.state_dict(),
             'best_prec1': best_prec1,
             'optimizer' : optimizer.state_dict(),
         }, is_best)
 
 
-def train(train_loader, model, criterion, optimizer, epoch,val_loader):
+def train(train_loader, model, criterion, optimizer, epoch,sf_list,Bits):
     batch_time = AverageMeter()
     data_time = AverageMeter()
     losses = AverageMeter()
@@ -261,6 +252,7 @@ def train(train_loader, model, criterion, optimizer, epoch,val_loader):
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
+        quant_utils.changemodelbit_fast(Bits,model,sf_list)
 
         # measure elapsed time
         batch_time.update(time.time() - end)
@@ -341,7 +333,7 @@ class AverageMeter(object):
         self.count += n
         self.avg = self.sum / self.count
 
-
+import math
 def adjust_learning_rate(optimizer, epoch):
     """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
     lr = args.lr * (0.5 ** (epoch // 1))
