@@ -14,7 +14,7 @@ __all__ = ['ResNet', 'resnet18', 'resnet34', 'resnet50', 'resnet101', 'resnet152
 #     'resnet101': 'https://download.pytorch.org/models/resnet101-5d3b4d8f.pth',
 #     'resnet152': 'https://download.pytorch.org/models/resnet152-b121ed2d.pth',
 # }
-models_dir = os.path.expanduser('/lustre/home/acct-seedwr/seedwr/fw/ImagenetRun/pretrained')
+models_dir = os.path.expanduser('')
 model_name = {
     'resnet18': 'resnet18-5c106cde.pth',
     'resnet34': 'resnet34-333f7ec4.pth',
@@ -115,7 +115,6 @@ class ResNet(nn.Module):
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
         self.avgpool = nn.AvgPool2d(7, stride=1)
         self.fc = nn.Linear(512 * block.expansion, num_classes)
-        self.lastbn=nn.BatchNorm1d(num_classes,affine=False)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
