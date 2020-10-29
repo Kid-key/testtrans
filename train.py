@@ -145,8 +145,9 @@ def main():
     else:
         print("=> creating model '{}'".format(args.arch))
         model = net()
-
-    model,sf_list,snr_list=quant_utils.quant_model_bit(model,Bits)
+    
+    print(Bits)
+    model,sf_list,n_dict=quant_utils.quant_model_bit(model,Bits)
 
     model = torch.nn.DataParallel(model).cuda()
 
@@ -174,6 +175,7 @@ def main():
             print("=> no checkpoint found at '{}'".format(args.resume))
 
     quant_utils.quant_relu_module_bit(model, 4)
+    #quant_utils.quant_relu_module(model, n_dict)
     model.cuda()
     quant_utils.running_module(model)
     model.eval()
