@@ -134,8 +134,8 @@ def main():
     global args, best_prec1
     #Bits=[10, 8, 7, 8, 6, 7, 5, 10, 6, 4, 5, 4, 5, 4, 3, 3, 3, 5, 3, 3]# 37527424.0/11166912
     #Bits=[10, 9, 8, 9, 8, 8, 7,  9, 7, 6, 6, 5, 7, 4, 4, 4, 3, 8, 3, 3]# 41627520.0
-    #Bits=[9,7,6,6,5,5,5, 7,5,9,4,4,4,4, 5,4,5,5,5, 4,4,4,4,4,4,4,4,4, 3,4,4,4,4,3,4,3]
-    Bits=4
+    Bits=[9,7,6,6,5,5,5, 7,5,9,4,4,4,4, 5,4,5,5,5, 4,4,4,4,4,4,4,4,4, 3,4,4,4,4,3,4,3]
+    #Bits=4
 
     # create model
     if args.pretrained:
@@ -173,8 +173,8 @@ def main():
         else:
             print("=> no checkpoint found at '{}'".format(args.resume))
 
-    quant_utils.quant_relu_module_bit(model, 4)
-    #quant_utils.quant_relu_module(model, n_dict)
+    #quant_utils.quant_relu_module_bit(model, 4)
+    quant_utils.quant_relu_module(model, n_dict)
     model.cuda()
     quant_utils.running_module(model)
     model.eval()
