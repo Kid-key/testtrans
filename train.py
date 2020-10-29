@@ -25,7 +25,7 @@ parser.add_argument('data', metavar='DIR',
 parser.add_argument('--arch', '-a', metavar='ARCH', default='resnet34')
 parser.add_argument('-j', '--workers', default=32, type=int, metavar='N',
                     help='number of data loading workers (default: 4)')
-parser.add_argument('--epochs', default=30, type=int, metavar='N',
+parser.add_argument('--epochs', default=90, type=int, metavar='N',
                     help='number of total epochs to run')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
@@ -155,6 +155,8 @@ def main():
     optimizer = torch.optim.SGD(model.parameters(), args.lr,
                                 weight_decay=args.weight_decay)
 
+    train_loader,val_loader = getdataset()
+    
    # optionally resume from a checkpoint
     if args.resume:
         if os.path.isfile(args.resume):
@@ -171,6 +173,11 @@ def main():
             print("=> no checkpoint found at '{}'".format(args.resume))
 
     quant_utils.quant_relu_module_bit(model, 4)
+    model.cuda()
+    quant_utils.running_module(model)
+    model.eval()
+    validate(val_loader, model, criterion)
+    quant_utils.test_module(model) 
 
     cudnn.benchmark = True
 
