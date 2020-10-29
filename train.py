@@ -16,8 +16,8 @@ import torchvision.models as models
 
 from datetime import datetime
 TIME_NOW = datetime.now().isoformat()
-if not os.path.exists(TIME_NOW):
-    os.mkdir(TIME_NOW)
+#if not os.path.exists(TIME_NOW):
+#    os.mkdir(TIME_NOW)
 
 parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
 parser.add_argument('data', metavar='DIR',
@@ -66,7 +66,6 @@ def rand_bbox(size, lam):
     bby2 = np.clip(cy + cut_h // 2, 0, H)
     return bbx1, bby1, bbx2, bby2
 
-from folder2lmdb import ImageFolderLMDB
 
 def getdataset():
     
@@ -207,14 +206,6 @@ def main():
         # remember best prec@1 and save checkpoint
         is_best = prec1 > best_prec1
         best_prec1 = max(prec1, best_prec1)
-        save_checkpoint({
-            'epoch': epoch + 1,
-            'arch': args.arch,
-            'sf': sf_list,
-            'state_dict': model.state_dict(),
-            'best_prec1': best_prec1,
-            'optimizer' : optimizer.state_dict(),
-        }, is_best)
 
 
 def train(train_loader, model, criterion, optimizer, epoch,sf_list,Bits):
