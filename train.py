@@ -146,7 +146,7 @@ def main():
         print("=> creating model '{}'".format(args.arch))
         model = net()
 
-    model,sf_list=quant_utils.quant_model_bit(model,Bits)
+    model,sf_list,snr_list=quant_utils.quant_model_bit(model,Bits)
 
     model = torch.nn.DataParallel(model).cuda()
 
