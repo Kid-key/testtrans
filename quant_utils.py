@@ -205,7 +205,7 @@ def quant_relu_module_bit(m,bit,pre=''):
                 assert False
                 continue
 
-            m._modules[name] = DynamicQuantReLU(bit,c.out_channels)
+            m._modules[name] = QuantReLU(bit,c.out_channels)#DynamicQuantReLU
             print((pre+name, bit))
             c = None
         elif isinstance(child, nn.Conv2d):
