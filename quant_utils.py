@@ -33,6 +33,7 @@ def linear_quantize(input, sf, bits):
 def quant_model_bit(model,Bits):
     state_dict_quant = model.state_dict()
     sf_list=[]
+    snr_dict={}
     kk=0  
     for name, module in model.named_modules():
       if isinstance(module, nn.Conv2d):
@@ -54,8 +55,12 @@ def quant_model_bit(model,Bits):
                 sf_t=sf
         sf_list.append(sf_t)
         state_dict_quant[name+'.weight'] = vq
+        error_noise=torch.norm(vq-v)
+        par_power=torch.norm(v)
+        snr=error_noise/par_power
+        snr_dict[name]=snr
     model.load_state_dict(state_dict_quant)
-    return model, sf_list
+    return model, sf_list, snr_dict
 
 def changemodelbit_fast(Bits,model,sf_list):
     state_dict_quant = model.state_dict()
@@ -140,10 +145,12 @@ class DynamicQuantReLU(nn.ReLU):
 
 import math
 
-def quant_relu_module(m,dict,pre=''):
+def quant_relu_module(m,n_dict,pre=''):
     children = list(m.named_children())
     c = None
     cn = None
+    if  pre=='module':
+        pre=''
     if pre:
         pre=pre+'.'
 
@@ -153,9 +160,9 @@ def quant_relu_module(m,dict,pre=''):
                 assert False
                 continue
 
-            noir=dict[pre+cn]
+            noir=n_dict[pre+cn]
 
-            bit = round(math.log2(3)-math.log2(noir)+0.49) #8# if 'extr' in pre else round(math.log2(3)-math.log2(noir))
+            bit = round(math.log2(3.)-math.log2(noir)) #8# if 'extr' in pre else round(math.log2(3)-math.log2(noir))
             bit = min(8,bit)
             m._modules[name] = QuantReLU(bit,c.out_channels)
             print((pre+name, bit))
@@ -164,34 +171,7 @@ def quant_relu_module(m,dict,pre=''):
             c = child
             cn = name
         else:
-            quant_relu_module(child,dict,pre+name)
-
-
-def quant_relu_module_d(m,dict,pre=''):
-    children = list(m.named_children())
-    c = None
-    cn = None
-    if pre:
-        pre=pre+'.'
-
-    for name, child in children:
-        if (isinstance(child, nn.ReLU) or isinstance(child, nn.ReLU6)) and 'layer' in pre:
-            if c == None:
-                assert False
-                continue
-
-            noir=dict[pre+cn]
-
-            bit = round(math.log2(3)-math.log2(noir)) #8# if 'extr' in pre else round(math.log2(3)-math.log2(noir))
-            bit = min(8,bit)
-            m._modules[name] = DynamicQuantReLU(bit,c.out_channels)
-            print((pre+name, bit))
-            c = None
-        elif isinstance(child, nn.Conv2d):
-            c = child
-            cn = name
-        else:
-            quant_relu_module_d(child,dict,pre+name)
+            quant_relu_module(child,n_dict,pre+name)
 
 def quant_relu_module_bit(m,bit,pre=''):
     children = list(m.named_children())
