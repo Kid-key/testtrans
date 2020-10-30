@@ -29,6 +29,7 @@ parser.add_argument('--epochs', default=90, type=int, metavar='N',
                     help='number of total epochs to run')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
+parser.add_argument('--stage', default=1, type=int, metavar='N')
 parser.add_argument('-b', '--batch-size', default=512, type=int,
                     metavar='N', help='mini-batch size')
 parser.add_argument('--lr', '--learning-rate', default=0.1, type=float,
@@ -134,8 +135,11 @@ def main():
     global args, best_prec1
     #Bits=[10, 8, 7, 8, 6, 7, 5, 10, 6, 4, 5, 4, 5, 4, 3, 3, 3, 5, 3, 3]# 37527424.0/11166912
     #Bits=[10, 9, 8, 9, 8, 8, 7,  9, 7, 6, 6, 5, 7, 4, 4, 4, 3, 8, 3, 3]# 41627520.0
-    Bits=[9,7,6,6,5,5,5, 7,5,9,4,4,4,4, 5,4,5,5,5, 4,4,4,4,4,4,4,4,4, 3,4,4,4,4,3,4,3]
-    #Bits=4
+    #Bits=[9,7,6,6,5,5,5, 7,5,9,4,4,4,4, 5,4,5,5,5, 4,4,4,4,4,4,4,4,4, 3,4,4,4,4,3,4,3]
+    if args.stage==1:
+        Bits=[9,7,6,6,5,5,5, 7,5,9,4,4,4,4, 5,4,5,5,5, 4,4,4,4,4,4,4,4,4, 3,4,4,4,4,3,4,3]
+    else:
+        Bits=4
 
     # create model
     if args.pretrained:
@@ -173,8 +177,11 @@ def main():
         else:
             print("=> no checkpoint found at '{}'".format(args.resume))
 
-    #quant_utils.quant_relu_module_bit(model, 4)
-    quant_utils.quant_relu_module(model, n_dict)
+    if args.stage==1:
+        quant_utils.quant_relu_module(model, n_dict)
+    else:
+        quant_utils.quant_relu_module_bit(model, 4)
+            
     model.cuda()
     quant_utils.running_module(model)
     model.eval()
