@@ -131,13 +131,16 @@ if '18' in args.arch:
 else:
     net = resnet34
 
+from torch.autograd import Variable
+import copy
+    
 def main():
     global args, best_prec1
     #Bits=[10, 8, 7, 8, 6, 7, 5, 10, 6, 4, 5, 4, 5, 4, 3, 3, 3, 5, 3, 3]# 37527424.0/11166912
     #Bits=[10, 9, 8, 9, 8, 8, 7,  9, 7, 6, 6, 5, 7, 4, 4, 4, 3, 8, 3, 3]# 41627520.0
     #Bits=[9,7,6,6,5,5,5, 7,5,9,4,4,4,4, 5,4,5,5,5, 4,4,4,4,4,4,4,4,4, 3,4,4,4,4,3,4,3]
     if args.stage==1:
-        Bits=[9,7,6,6,5,5,5, 7,5,9,4,4,4,4, 5,4,5,5,5, 4,4,4,4,4,4,4,4,4, 3,4,4,4,4,3,4,3]
+        Bits=[10, 9, 8, 9, 8, 8, 7,  9, 7, 6, 6, 5, 7, 4, 4, 4, 3, 8, 3, 3]
     else:
         Bits=4
 
@@ -148,7 +151,10 @@ def main():
     else:
         print("=> creating model '{}'".format(args.arch))
         model = net()
-    
+    state_dict = copy.deepcopy(model.state_dict())
+    for k, v in state_dict.items():
+        state_dict[k]= Variable(v.float().cuda(),requires_grad=True)
+        
     print(Bits)
     model,sf_list,n_dict=quant_utils.quant_model_bit(model,Bits)
 
@@ -157,7 +163,7 @@ def main():
     # define loss function (criterion) and optimizer
     criterion = nn.CrossEntropyLoss().cuda()
 
-    optimizer = torch.optim.SGD(model.parameters(), args.lr,
+    optimizer = torch.optim.SGD([{'params':filter(lambda p: p.requires_grad,model.parameters())},{'params':(state_dict[k] for k in state_dict.keys())}], args.lr,
                                 weight_decay=args.weight_decay)
 
     train_loader,val_loader = getdataset()
@@ -205,7 +211,7 @@ def main():
         consine_learning_rate(optimizer, epoch,args.lr,args.epochs)
 
         # train for one epoch
-        train(train_loader, model, criterion, optimizer, epoch,sf_list,Bits)
+        train(train_loader, model, criterion, optimizer, epoch,sf_list,Bits,state_dict)
 
         # evaluate on validation set
         prec1 = validate(val_loader, model, criterion)
@@ -215,7 +221,7 @@ def main():
         best_prec1 = max(prec1, best_prec1)
 
 
-def train(train_loader, model, criterion, optimizer, epoch,sf_list,Bits):
+def train(train_loader, model, criterion, optimizer, epoch,sf_list,Bits,state):
     batch_time = AverageMeter()
     data_time = AverageMeter()
     losses = AverageMeter()
@@ -259,8 +265,9 @@ def train(train_loader, model, criterion, optimizer, epoch,sf_list,Bits):
         # compute gradient and do SGD step
         optimizer.zero_grad()
         loss.backward()
+        quant_utils.quantback(model,state)
         optimizer.step()
-        quant_utils.changemodelbit_fast(Bits,model,sf_list)
+        quant_utils.changemodelbit_fast(Bits,model,sf_list,state)
 
         # measure elapsed time
         batch_time.update(time.time() - end)
@@ -357,7 +364,7 @@ def consine_learning_rate(optimizer, epoch, init_lr=0.1,T_max=120):
    lr = 1e-6 + init_lr*(1+math.cos(math.pi*epoch/T_max))/2
    for param_group in optimizer.param_groups:
        param_group['lr'] = lr
-       print(optimizer.param_groups[0]['lr'])
+   print(optimizer.param_groups[0]['lr'])
 
 def accuracy(output, target, topk=(1,)):
     """Computes the precision@k for the specified values of k"""
