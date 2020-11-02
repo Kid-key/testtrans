@@ -62,12 +62,12 @@ def quant_model_bit(model,Bits):
     model.load_state_dict(state_dict_quant)
     return model, sf_list, snr_dict
 
-def changemodelbit_fast(Bits,model,sf_list):
+def changemodelbit_fast(Bits,model,sf_list,state):
     state_dict_quant = model.state_dict()
     kk=0    
     for name, module in model.named_modules():
       if isinstance(module, nn.Conv2d):
-        v=state_dict_quant[name+'.weight']
+        v=state[name[7:]+'.weight']
         if isinstance(Bits,int):
             bits=Bits
         else:
@@ -77,6 +77,11 @@ def changemodelbit_fast(Bits,model,sf_list):
         kk=kk+1     
         state_dict_quant[name+'.weight'] = v_quant     
     model.load_state_dict(state_dict_quant)
+
+def quantback(model,state_dict):
+    for name, module in model.named_modules():
+      if isinstance(module, nn.Conv2d):
+          state_dict[name[7:]+'.weight'].grad = module.weight.grad
 
 #########################################Activation
 def __PintQuantize__(num_bit, tensor, clamp_v):
